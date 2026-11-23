@@ -1,0 +1,109 @@
+# Integración continua: en cada push se revisa formato, lint y tipos, se corren las pruebas contra
+# PostgreSQL 16 y Redis 7 (con cobertura mínima de 80 %) y se construye la imagen de Docker.
+name: CI
+
+on:
+  push:
+    branches: [main, 'incremento-*']
+  pull_request:
+    branches: [main]
+
+# Un push nuevo a la misma rama cancela la ejecución anterior.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  pruebas:
+    name: Calidad y pruebas
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+
+    # Las mismas versiones que en Docker Compose; la base se llama pos_pruebas, como en la PC.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: pos
+          POSTGRES_PASSWORD: pos_ci
+          POSTGRES_DB: pos_pruebas
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U pos -d pos_pruebas"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+
+    env:
+      DB_HOST: 127.0.0.1
+      DB_PUERTO: 5432
+      DB_USUARIO: pos
+      DB_CLAVE: pos_ci
+      # pg_dump y pg_restore de la misma versión que el servidor, para la prueba real de respaldo.
+      RESPALDO_PG_DUMP: /usr/lib/postgresql/16/bin/pg_dump
+      RESPALDO_PG_RESTORE: /usr/lib/postgresql/16/bin/pg_restore
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Cliente de PostgreSQL 16
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client-16
+
+      - name: Dependencias
+        run: npm ci
+
+      - name: Formato (Prettier)
+        run: npm run formato:revisar
+
+      - name: Lint (ESLint)
+        run: npm run lint
+
+      - name: Tipos (tsc --noEmit)
+        run: npm run tipos
+
+      # Falla si cualquier paquete baja de 80 % (check-coverage en cada .nycrc.json).
+      - name: Pruebas con cobertura
+        run: npm run cobertura
+
+      - name: Guardar el reporte de cobertura
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cobertura
+          path: |
+            paquetes/compartido/coverage
+            apps/servidor/coverage
+          retention-days: 14
+
+  imagen:
+    name: Imagen de Docker
+    needs: pruebas
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      # Solo se construye para comprobar que el Dockerfile funciona; no se publica.
+      - name: Construir pos-servidor
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          push: false
+          tags: pos-servidor:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

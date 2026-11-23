@@ -1,0 +1,50 @@
+{
+  "name": "pos-abarrotes",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Sistema de punto de venta para una tienda de abarrotes con modo accesible",
+  "workspaces": [
+    "paquetes/compartido",
+    "apps/servidor"
+  ],
+  "engines": {
+    "node": ">=20.9.0"
+  },
+  "scripts": {
+    "build": "npm run build -w @pos/compartido && npm run build -w @pos/servidor",
+    "dev": "npm run build -w @pos/compartido && npm run dev -w @pos/servidor",
+    "worker": "npm run build -w @pos/compartido && npm run worker -w @pos/servidor",
+    "start": "npm run start -w @pos/servidor",
+    "test": "npm run build -w @pos/compartido && npm test -w @pos/compartido && npm test -w @pos/servidor",
+    "cobertura": "npm run build -w @pos/compartido && npm run cobertura -w @pos/compartido && npm run cobertura -w @pos/servidor",
+    "tipos": "npm run build -w @pos/compartido && npm run tipos -w @pos/compartido && npm run tipos -w @pos/servidor",
+    "lint": "eslint .",
+    "formato": "prettier --write .",
+    "formato:revisar": "prettier --check .",
+    "bd:levantar": "docker compose -f docker/docker-compose.dev.yml up -d --wait",
+    "bd:detener": "docker compose -f docker/docker-compose.dev.yml stop",
+    "migracion:ejecutar": "npm run build -w @pos/compartido && npm run migracion:ejecutar -w @pos/servidor",
+    "bd:reiniciar": "docker compose -f docker/docker-compose.dev.yml down -v && docker compose -f docker/docker-compose.dev.yml up -d --wait",
+    "datos:ejemplo": "npm run build -w @pos/compartido && npm run datos:ejemplo -w @pos/servidor",
+    "respaldo:restaurar": "npm run build -w @pos/compartido && npm run respaldo:restaurar -w @pos/servidor --"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "@istanbuljs/nyc-config-typescript": "^1.0.2",
+    "@types/chai": "^4.3.20",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^20.19.43",
+    "@types/sinon": "^22.0.0",
+    "chai": "^4.5.0",
+    "eslint": "^9.39.5",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^17.13.0",
+    "mocha": "^11.8.0",
+    "nyc": "^17.1.0",
+    "prettier": "^3.9.10",
+    "sinon": "^21.1.2",
+    "ts-node": "^10.9.2",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.71.2"
+  }
+}

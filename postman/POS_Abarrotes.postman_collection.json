@@ -1,0 +1,2771 @@
+{
+  "info": {
+    "name": "POS Abarrotes",
+    "description": "Peticiones de demostración del POS: una jornada completa. Ejecutar en orden sobre una base nueva con la API y el worker encendidos: el Dueño entra con el PIN temporal, lo cambia, da de alta el catálogo y el inventario, abre la caja, vende, devuelve, cierra y consulta los reportes. Cada petición guarda en variables lo que usa la siguiente.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base",
+      "value": "http://localhost:8080/api/v1"
+    },
+    {
+      "key": "categoriaId",
+      "value": ""
+    },
+    {
+      "key": "productoId",
+      "value": ""
+    },
+    {
+      "key": "codigo",
+      "value": ""
+    },
+    {
+      "key": "pinTemporal",
+      "value": "0000"
+    },
+    {
+      "key": "pinDueno",
+      "value": "1111"
+    },
+    {
+      "key": "token",
+      "value": ""
+    },
+    {
+      "key": "usuarioId",
+      "value": ""
+    },
+    {
+      "key": "ventaProductoId",
+      "value": ""
+    },
+    {
+      "key": "claveVenta",
+      "value": ""
+    },
+    {
+      "key": "folio",
+      "value": ""
+    },
+    {
+      "key": "proveedorNombre",
+      "value": ""
+    },
+    {
+      "key": "proveedorId",
+      "value": ""
+    },
+    {
+      "key": "codigoEntrada",
+      "value": ""
+    },
+    {
+      "key": "entradaProductoId",
+      "value": ""
+    },
+    {
+      "key": "folioNota",
+      "value": ""
+    },
+    {
+      "key": "entradaId",
+      "value": ""
+    },
+    {
+      "key": "folioCambio",
+      "value": ""
+    },
+    {
+      "key": "saldoFavorId",
+      "value": ""
+    },
+    {
+      "key": "promoInicio",
+      "value": ""
+    },
+    {
+      "key": "promoFin",
+      "value": ""
+    },
+    {
+      "key": "promoHoy",
+      "value": ""
+    },
+    {
+      "key": "clienteCorreo",
+      "value": ""
+    },
+    {
+      "key": "clienteTelefono",
+      "value": ""
+    },
+    {
+      "key": "clienteId",
+      "value": ""
+    },
+    {
+      "key": "exportacionPdf",
+      "value": ""
+    },
+    {
+      "key": "exportacionExcel",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "Salud",
+      "request": {
+        "method": "GET",
+        "url": "{{base}}/salud"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Servicio disponible', () => {",
+              "  pm.response.to.have.status(200);",
+              "  pm.expect(pm.response.json().data.estado).to.eql('ok');",
+              "});",
+              "pm.test('PostgreSQL, Redis y el worker responden', () => pm.expect(pm.response.json().data.servicios).to.deep.equal({ postgres: 'ok', redis: 'ok', worker: 'ok' }));"
+            ]
+          }
+        }
+      ],
+      "auth": {
+        "type": "noauth"
+      }
+    },
+    {
+      "name": "Acceso",
+      "item": [
+        {
+          "name": "Iniciar sesión con el PIN temporal",
+          "auth": {
+            "type": "noauth"
+          },
+          "request": {
+            "method": "POST",
+            "url": "{{base}}/auth/pin",
+            "body": {
+              "mode": "raw",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              },
+              "raw": "{ \"pin\": \"{{pinTemporal}}\" }"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Sesión iniciada; debe cambiar el PIN', () => pm.expect(pm.response.json().data.usuario.debeCambiarPin).to.eql(true));",
+                  "pm.collectionVariables.set('token', pm.response.json().data.tokenAcceso);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Con PIN temporal no se usa el catálogo (403)",
+          "request": {
+            "method": "GET",
+            "url": "{{base}}/productos"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('Debe cambiar su PIN', () => pm.response.to.have.status(403));"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cambiar el PIN temporal",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base}}/auth/mi-pin",
+            "body": {
+              "mode": "raw",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              },
+              "raw": "{ \"pin\": \"{{pinDueno}}\" }"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('PIN actualizado', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PIN incorrecto (401)",
+          "auth": {
+            "type": "noauth"
+          },
+          "request": {
+            "method": "POST",
+            "url": "{{base}}/auth/pin",
+            "body": {
+              "mode": "raw",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              },
+              "raw": "{ \"pin\": \"9999\" }"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Avisa los intentos restantes', () => pm.expect(pm.response.json().detail).to.match(/4 intentos/));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Iniciar sesión con el PIN nuevo",
+          "auth": {
+            "type": "noauth"
+          },
+          "request": {
+            "method": "POST",
+            "url": "{{base}}/auth/pin",
+            "body": {
+              "mode": "raw",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              },
+              "raw": "{ \"pin\": \"{{pinDueno}}\" }"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Permisos del Dueño', () => pm.expect(pm.response.json().data.permisos).to.include('producto:precio'));",
+                  "pm.collectionVariables.set('token', pm.response.json().data.tokenAcceso);",
+                  "pm.collectionVariables.set('usuarioId', pm.response.json().data.usuario.id);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Catálogo",
+      "item": [
+        {
+          "name": "Listar categorías",
+          "request": {
+            "method": "GET",
+            "url": "{{base}}/categorias"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const datos = pm.response.json().data;",
+                  "pm.test('Existen las 8 categorías básicas', () => pm.expect(datos.length).to.be.at.least(8));",
+                  "pm.collectionVariables.set('categoriaId', datos.find(c => c.nombre === 'Abarrotes').id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Registrar producto",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": ["pm.collectionVariables.set('codigo', 'DEMO-' + Date.now());"]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Producto registrado', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('productoId', pm.response.json().data.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base}}/productos",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"codigo\": \"{{codigo}}\",\n  \"nombre\": \"Frijol negro 1 kg\",\n  \"unidad\": \"PIEZA\",\n  \"precio\": \"38.50\",\n  \"costo\": \"31.00\",\n  \"existenciaMinima\": \"5\",\n  \"categoriaId\": \"{{categoriaId}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Registrar con código repetido (409)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('Código repetido rechazado', () => pm.response.to.have.status(409));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base}}/productos",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"codigo\": \"{{codigo}}\",\n  \"nombre\": \"Otro producto\",\n  \"unidad\": \"PIEZA\",\n  \"precio\": \"10.00\",\n  \"costo\": \"8.00\",\n  \"existenciaMinima\": \"0\",\n  \"categoriaId\": \"{{categoriaId}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Registrar con datos inválidos (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Indica el campo exacto', () => {",
+                  "  pm.response.to.have.status(400);",
+                  "  pm.expect(pm.response.json().errores.map(e => e.campo)).to.include('body.precio');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base}}/productos",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"codigo\": \"SIN-PRECIO\",\n  \"nombre\": \"Producto sin precio\",\n  \"unidad\": \"PIEZA\",\n  \"costo\": \"8.00\",\n  \"existenciaMinima\": \"0\",\n  \"categoriaId\": \"{{categoriaId}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Buscar por código",
+          "request": {
+            "method": "GET",
+            "url": "{{base}}/productos/codigo/{{codigo}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('Producto encontrado', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Buscar por nombre sin acentos",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base}}/productos?buscar=FRÍJOL&page=1&limit=10",
+              "host": ["{{base}}"],
+              "path": ["productos"],
+              "query": [
+                {
+                  "key": "buscar",
+                  "value": "FRÍJOL"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Hay coincidencias', () => pm.expect(pm.response.json().meta.totalRecords).to.be.above(0));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cambiar precio",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base}}/productos/{{productoId}}/precio",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{ \"precio\": \"40.00\" }"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Precio actualizado', () => pm.expect(pm.response.json().data.precio).to.eql('40.00'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Historial de precios",
+          "request": {
+            "method": "GET",
+            "url": "{{base}}/productos/{{productoId}}/precios"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Guarda precio anterior y nuevo', () => pm.expect(pm.response.json().data[0].precioAnterior).to.eql('38.50'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Desactivar producto",
+          "request": {
+            "method": "DELETE",
+            "url": "{{base}}/productos/{{productoId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Producto desactivado', () => pm.expect(pm.response.json().data.activo).to.eql(false));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Código desactivado ya no se vende",
+          "request": {
+            "method": "GET",
+            "url": "{{base}}/productos/codigo/{{codigo}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('No encontrado', () => pm.response.to.have.status(404));"]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Configuración",
+      "item": [
+        {
+          "name": "Consultar datos de la tienda",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Configuración inicial', () => pm.response.to.have.status(200));",
+                  "pm.test('Trae nombre y política', () => pm.expect(pm.response.json().data.politicaDevolucion).to.not.be.empty);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base}}/configuracion"
+          }
+        },
+        {
+          "name": "Modificar datos de la tienda",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Configuración guardada', () => pm.response.to.have.status(200));",
+                  "pm.test('Nombre nuevo', () => pm.expect(pm.response.json().data.nombre).to.equal('Abarrotes Don Pepe'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "url": "{{base}}/configuracion",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Abarrotes Don Pepe\",\n  \"direccion\": \"Av. Obregón 123, Culiacán\",\n  \"telefono\": \"667 123 4567\",\n  \"politicaDevolucion\": \"Devoluciones el mismo día presentando este ticket.\",\n  \"enlaceBot\": \"https://t.me/AbarrotesDonPepeBot\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Sin nombre de la tienda (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Falta el nombre', () => pm.response.to.have.status(400));",
+                  "pm.test('Indica el campo', () => pm.expect(pm.response.json().errores[0].campo).to.equal('body.nombre'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "url": "{{base}}/configuracion",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"\",\n  \"politicaDevolucion\": \"Devoluciones el mismo día.\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Código para recibir los avisos por Telegram",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Código generado', () => pm.response.to.have.status(201));",
+                  "pm.test('Seis dígitos', () => pm.expect(pm.response.json().data.codigo).to.match(/^\\d{6}$/));",
+                  "pm.test('Dice qué mandar al bot', () => pm.expect(pm.response.json().message).to.include('/dueno'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base}}/configuracion/telegram-dueno"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Proveedores",
+      "item": [
+        {
+          "name": "Registrar proveedor",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": ["pm.collectionVariables.set('proveedorNombre', 'Abarrotera ' + Date.now());"]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Proveedor registrado', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('proveedorId', pm.response.json().data.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base}}/proveedores",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"{{proveedorNombre}}\",\n  \"telefono\": \"667 123 4567\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Proveedor repetido (409)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('No se repite el proveedor', () => pm.response.to.have.status(409));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base}}/proveedores",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"{{proveedorNombre}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Listar proveedores",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Lista de proveedores', () => pm.response.to.have.status(200));",
+                  "pm.test('Incluye el registrado', () => pm.expect(pm.response.json().data.map((p) => p.id)).to.include(pm.collectionVariables.get('proveedorId')));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base}}/proveedores"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Inventario: entradas",
+      "item": [
+        {
+          "name": "Producto para la entrada",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": ["pm.collectionVariables.set('codigoEntrada', 'ENT-' + Date.now());"]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Producto registrado', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('entradaProductoId', pm.response.json().data.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base}}/productos",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"codigo\": \"{{codigoEntrada}}\",\n  \"nombre\": \"Arroz 1 kg\",\n  \"unidad\": \"PIEZA\",\n  \"precio\": \"32.00\",\n  \"costo\": \"25.00\",\n  \"existenciaMinima\": \"6\",\n  \"categoriaId\": \"{{categoriaId}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Registrar entrada sin caja abierta: queda sin pago",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": ["pm.collectionVariables.set('folioNota', 'N-' + Date.now());"]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Entrada registrada', () => pm.response.to.have.status(201));",
+                  "pm.test('Total = 24 x 26.50', () => pm.expect(pm.response.json().data.total).to.eql('636.00'));",
+                  "pm.test('Sin caja abierta queda sin pago', () => {",
+                  "  pm.expect(pm.response.json().data.pago).to.equal(null);",
+                  "  pm.expect(pm.response.json().message).to.include('sin pago');",
+                  "});",
+                  "pm.collectionVariables.set('entradaId', pm.response.json().data.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base}}/inventario/entradas",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"proveedorId\": \"{{proveedorId}}\",\n  \"folioNota\": \"{{folioNota}}\",\n  \"renglones\": [\n    { \"productoId\": \"{{entradaProductoId}}\", \"cantidad\": \"24\", \"costoUnitario\": \"26.50\", \"caducidad\": \"2027-06-30\" }\n  ],\n  \"pago\": { \"monto\": \"636.00\" }\n}"
+            }
+          }
+        },
+        {
+          "name": "Nota repetida (409)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('No se registra dos veces', () => pm.response.to.have.status(409));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base}}/inventario/entradas",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"proveedorId\": \"{{proveedorId}}\",\n  \"folioNota\": \"{{folioNota}}\",\n  \"renglones\": [\n    { \"productoId\": \"{{entradaProductoId}}\", \"cantidad\": \"1\", \"costoUnitario\": \"26.50\", \"caducidad\": null }\n  ]\n}"
+            }
+          }
+        },
+        {
+          "name": "Consultar la entrada",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Entrada encontrada', () => pm.response.to.have.status(200));",
+                  "pm.test('Un lote por renglón', () => pm.expect(pm.response.json().data.renglones[0].loteId).to.be.a('string'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base}}/inventario/entradas/{{entradaId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Inventario: mermas y consumo",
+      "item": [
+        {
+          "name": "Merma del lote que caduca primero",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Merma registrada', () => pm.response.to.have.status(201));",
+                  "pm.test('Quedan 22 en el lote', () => pm.expect(pm.response.json().data.existenciaLote).to.equal('22.00'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base}}/inventario/salidas",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tipo\": \"MERMA\",\n  \"productoId\": \"{{entradaProductoId}}\",\n  \"cantidad\": \"2\",\n  \"motivo\": \"Lata abollada\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Más de lo que hay en el lote (422)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('No pasa de la existencia del lote', () => pm.response.to.have.status(422));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base}}/inventario/salidas",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tipo\": \"CONSUMO\",\n  \"productoId\": \"{{entradaProductoId}}\",\n  \"cantidad\": \"100\",\n  \"motivo\": \"Comida\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Merma sin motivo (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('Motivo obligatorio', () => pm.response.to.have.status(400));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base}}/inventario/salidas",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tipo\": \"MERMA\",\n  \"productoId\": \"{{entradaProductoId}}\",\n  \"cantidad\": \"1\",\n  \"motivo\": \"\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Inventario: ajustes por conteo",
+      "item": [
+        {
+          "name": "El conteo coincide: no se registra",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Sin ajuste', () => pm.response.to.have.status(200));",
+                  "pm.test('No hay id', () => pm.expect(pm.response.json().data.id).to.equal(null));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base}}/inventario/ajustes",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"productoId\": \"{{entradaProductoId}}\",\n  \"contada\": \"22\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Faltan piezas: ajuste",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Ajuste registrado', () => pm.response.to.have.status(201));",
+                  "pm.test('Diferencia de -2.00', () => pm.expect(pm.response.json().data.diferencia).to.equal('-2.00'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base}}/inventario/ajustes",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"productoId\": \"{{entradaProductoId}}\",\n  \"contada\": \"20\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Conteo negativo (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('No se acepta', () => pm.response.to.have.status(400));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base}}/inventario/ajustes",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"productoId\": \"{{entradaProductoId}}\",\n  \"contada\": \"-1\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Inventario: existencias y alertas",
+      "item": [
+        {
+          "name": "Existencia y lotes del producto",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Existencias', () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json().data;",
+                  "pm.test('24 - 2 de merma - 2 del ajuste = 20', () => pm.expect(d.existencia).to.equal('20.00'));",
+                  "pm.test('Un lote', () => pm.expect(d.lotes).to.have.length(1));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base}}/inventario/existencias/{{entradaProductoId}}"
+          }
+        },
+        {
+          "name": "Alertas de inventario",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Alertas', () => pm.response.to.have.status(200));",
+                  "pm.test('Mínimo, caducidad y última revisión', () => pm.expect(pm.response.json().data).to.have.keys('fecha', 'minimo', 'caducidad', 'ultimaRevision'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base}}/inventario/alertas"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Caja: apertura y movimientos",
+      "item": [
+        {
+          "name": "Caja actual: primer uso",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Estado de la caja', () => pm.response.to.have.status(200));",
+                  "pm.test('Pide el fondo inicial', () => pm.expect(pm.response.json().data.requiereFondoInicial).to.equal(true));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base}}/caja/actual"
+          }
+        },
+        {
+          "name": "Abrir sin fondo en el primer uso (422)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('Exige el fondo por denominación', () => pm.response.to.have.status(422));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base}}/caja/apertura",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          }
+        },
+        {
+          "name": "Abrir con el fondo y ver el resumen de alertas",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Caja abierta', () => pm.response.to.have.status(201));",
+                  "pm.test('Fondo de 500.00', () => pm.expect(pm.response.json().data.fondoInicial).to.equal('500.00'));",
+                  "const alertas = pm.response.json().data.alertas;",
+                  "pm.test('Trae el resumen de alertas', () => pm.expect(alertas).to.include.keys('minimo', 'porCaducar', 'caducados', 'mensaje'));",
+                  "pm.test('Con la frase para leer', () => pm.expect(alertas.mensaje).to.be.a('string').and.not.empty);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base}}/caja/apertura",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fondoInicial\": {\n    \"B100\": 5\n  }\n}"
+            }
+          }
+        },
+        {
+          "name": "Abrir otra vez (409)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('Ya hay una caja abierta', () => pm.response.to.have.status(409));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base}}/caja/apertura",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          }
+        },
+        {
+          "name": "Retiro",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('Retiro registrado', () => pm.response.to.have.status(201));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base}}/caja/movimientos",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tipo\": \"RETIRO\",\n  \"monto\": \"150.00\",\n  \"motivo\": \"Pago del garrafón\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Pagar sin efectivo suficiente (422)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('El efectivo no alcanza', () => pm.response.to.have.status(422));",
+                  "pm.test('Dice cuánto hay', () => pm.expect(pm.response.json().detail).to.equal('En caja hay $350.00; no alcanza para pagar $636.00'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base}}/inventario/entradas/{{entradaId}}/pago",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"monto\": \"636.00\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Ingreso",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('Ingreso registrado', () => pm.response.to.have.status(201));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base}}/caja/movimientos",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tipo\": \"INGRESO\",\n  \"monto\": \"586.00\",\n  \"motivo\": \"Dinero para pagar al proveedor\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Pagar menos que el total de la nota (422)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Todo o nada', () => pm.response.to.have.status(422));",
+                  "pm.test('Pide el total', () => pm.expect(pm.response.json().detail).to.equal('El pago debe ser el total de la nota ($636.00)'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base}}/inventario/entradas/{{entradaId}}/pago",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"monto\": \"100.00\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Pagar la entrada después",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Pago registrado', () => pm.response.to.have.status(201));",
+                  "pm.test('Queda en la entrada', () => pm.expect(pm.response.json().data.pago.monto).to.equal('636.00'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base}}/inventario/entradas/{{entradaId}}/pago",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"monto\": \"636.00\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Pagar otra vez la misma entrada (409)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('Un solo pago por entrada', () => pm.response.to.have.status(409));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base}}/inventario/entradas/{{entradaId}}/pago",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"monto\": \"636.00\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Movimiento sin motivo (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('Motivo obligatorio', () => pm.response.to.have.status(400));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base}}/caja/movimientos",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tipo\": \"RETIRO\",\n  \"monto\": \"10.00\",\n  \"motivo\": \"\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Efectivo esperado (Dueño)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Caja actual', () => pm.response.to.have.status(200));",
+                  "pm.test('Esperado = 500 - 150 + 50 - 100', () => pm.expect(pm.response.json().data.caja.esperado).to.equal('300.00'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base}}/caja/actual"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Ventas",
+      "description": "Se paga con tarjeta para no cambiar el efectivo esperado del arqueo que sigue.",
+      "item": [
+        {
+          "name": "Registrar producto para vender",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": ["pm.collectionVariables.set('codigo', 'VTA-' + Date.now());"]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Producto registrado', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('ventaProductoId', pm.response.json().data.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base}}/productos",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"codigo\": \"{{codigo}}\",\n  \"nombre\": \"Arroz 1 kg\",\n  \"unidad\": \"PIEZA\",\n  \"precio\": \"25.00\",\n  \"costo\": \"20.00\",\n  \"existenciaMinima\": \"0\",\n  \"categoriaId\": \"{{categoriaId}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Cobrar con tarjeta",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": ["pm.collectionVariables.set('claveVenta', pm.variables.replaceIn('{{$guid}}'));"]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Venta cobrada', () => pm.response.to.have.status(201));",
+                  "const v = pm.response.json().data;",
+                  "pm.collectionVariables.set('folio', v.folio);",
+                  "pm.test('Total recalculado por el servidor', () => pm.expect(v.total).to.equal('50.00'));",
+                  "pm.test('Avisa la venta sin existencias', () => pm.expect(v.avisos[0].faltante).to.equal('2.00'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base}}/ventas",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{claveVenta}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"iniciadaPor\": \"{{usuarioId}}\",\n  \"renglones\": [\n    {\n      \"productoId\": \"{{ventaProductoId}}\",\n      \"cantidad\": \"2\"\n    }\n  ],\n  \"pagos\": [\n    {\n      \"metodo\": \"TARJETA\",\n      \"monto\": \"50.00\",\n      \"referencia\": \"AUT-001\"\n    }\n  ]\n}"
+            }
+          }
+        },
+        {
+          "name": "Repetir el cobro con la misma clave (200)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('No se duplica la venta', () => pm.response.to.have.status(200));",
+                  "pm.test('Mismo folio', () => pm.expect(pm.response.json().data.folio).to.equal(Number(pm.collectionVariables.get('folio'))));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base}}/ventas",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{claveVenta}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"iniciadaPor\": \"{{usuarioId}}\",\n  \"renglones\": [\n    {\n      \"productoId\": \"{{ventaProductoId}}\",\n      \"cantidad\": \"2\"\n    }\n  ],\n  \"pagos\": [\n    {\n      \"metodo\": \"TARJETA\",\n      \"monto\": \"50.00\",\n      \"referencia\": \"AUT-001\"\n    }\n  ]\n}"
+            }
+          }
+        },
+        {
+          "name": "Pagos que no cubren el total (422)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": ["pm.collectionVariables.set('claveVenta', pm.variables.replaceIn('{{$guid}}'));"]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Faltan pagos', () => pm.response.to.have.status(422));",
+                  "pm.test('Indica el faltante', () => pm.expect(pm.response.json().faltante).to.equal('15.00'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base}}/ventas",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{claveVenta}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"iniciadaPor\": \"{{usuarioId}}\",\n  \"renglones\": [\n    {\n      \"productoId\": \"{{ventaProductoId}}\",\n      \"cantidad\": \"1\"\n    }\n  ],\n  \"pagos\": [\n    {\n      \"metodo\": \"TRANSFERENCIA\",\n      \"monto\": \"10.00\",\n      \"referencia\": \"SPEI-1\"\n    }\n  ]\n}"
+            }
+          }
+        },
+        {
+          "name": "Ticket original",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('PDF generado', () => pm.response.to.have.status(200));",
+                  "pm.test('Es PDF', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/pdf'));",
+                  "pm.test('Es el original', () => pm.expect(pm.response.headers.get('X-Ticket-Copia')).to.equal('false'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base}}/ventas/{{folio}}/ticket.pdf",
+            "header": []
+          }
+        },
+        {
+          "name": "Reimprimir ticket",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('PDF generado', () => pm.response.to.have.status(200));",
+                  "pm.test('Sale como copia', () => pm.expect(pm.response.headers.get('X-Ticket-Copia')).to.equal('true'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base}}/ventas/{{folio}}/ticket.pdf",
+            "header": []
+          }
+        },
+        {
+          "name": "Reimprimir el último ticket",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('Último ticket', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base}}/ventas/ultimo/ticket.pdf",
+            "header": []
+          }
+        },
+        {
+          "name": "Folio inexistente (404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('Avisa que no existe', () => pm.response.to.have.status(404));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base}}/ventas/999999/ticket.pdf",
+            "header": []
+          }
+        },
+        {
+          "name": "Cancelar venta en curso",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Venta cancelada registrada', () => pm.response.to.have.status(201));",
+                  "pm.test('Sin folio', () => pm.expect(pm.response.json().data.folio).to.equal(null));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base}}/ventas/canceladas",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"iniciadaPor\": \"{{usuarioId}}\",\n  \"renglones\": [\n    {\n      \"productoId\": \"{{ventaProductoId}}\",\n      \"cantidad\": \"1\"\n    }\n  ]\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Devoluciones",
+      "item": [
+        {
+          "name": "Productos que se pueden devolver",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Venta del día', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json().data.renglones[0];",
+                  "pm.test('Se pueden devolver las 2 piezas', () => pm.expect(r.devolvible).to.equal('2.00'));",
+                  "pm.test('Lo pagado por el renglón', () => pm.expect(r.neto).to.equal('50.00'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base}}/devoluciones/folio/{{folio}}"
+          }
+        },
+        {
+          "name": "Devolver una parte con reembolso en efectivo",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Devolución registrada', () => pm.response.to.have.status(201));",
+                  "const d = pm.response.json().data;",
+                  "pm.test('Es parcial', () => pm.expect(d.tipo).to.equal('PARCIAL'));",
+                  "pm.test('Reembolso de una pieza', () => pm.expect(d.reembolso).to.equal('25.00'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base}}/devoluciones",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"folio\": {{folio}},\n  \"motivo\": \"El cliente ya no lo quiere\",\n  \"renglones\": [{ \"renglon\": 1, \"cantidad\": \"1\", \"destino\": \"INVENTARIO\" }]\n}"
+            }
+          }
+        },
+        {
+          "name": "Devolver más de lo que queda (422)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('No se devuelve de más', () => pm.response.to.have.status(422));",
+                  "pm.test('Dice cuánto queda', () => pm.expect(pm.response.json().detail).to.equal('Del renglón 1 solo quedan 1.00 por devolver'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base}}/devoluciones",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"folio\": {{folio}},\n  \"motivo\": \"El cliente ya no lo quiere\",\n  \"renglones\": [{ \"renglon\": 1, \"cantidad\": \"5\", \"destino\": \"INVENTARIO\" }]\n}"
+            }
+          }
+        },
+        {
+          "name": "Devolución sin motivo (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('El motivo es obligatorio', () => pm.response.to.have.status(400));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base}}/devoluciones",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"folio\": {{folio}},\n  \"motivo\": \"\",\n  \"renglones\": [{ \"renglon\": 1, \"cantidad\": \"1\", \"destino\": \"MERMA\" }]\n}"
+            }
+          }
+        },
+        {
+          "name": "Cambio por producto de lo que queda (422)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('La devolución completa es en efectivo', () => pm.response.to.have.status(422));",
+                  "pm.test('Lo explica', () => pm.expect(pm.response.json().detail).to.include('se reembolsa en efectivo'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base}}/devoluciones",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"folio\": {{folio}},\n  \"motivo\": \"Lo cambia por otro\",\n  \"renglones\": [{ \"renglon\": 1, \"cantidad\": \"1\", \"destino\": \"INVENTARIO\" }],\n  \"reembolso\": \"SALDO_FAVOR\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Otra venta con tarjeta para el cambio",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": ["pm.collectionVariables.set('claveVenta', pm.variables.replaceIn('{{$guid}}'));"]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Venta cobrada', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('folioCambio', pm.response.json().data.folio);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base}}/ventas",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{claveVenta}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"iniciadaPor\": \"{{usuarioId}}\",\n  \"renglones\": [\n    {\n      \"productoId\": \"{{ventaProductoId}}\",\n      \"cantidad\": \"2\"\n    }\n  ],\n  \"pagos\": [\n    {\n      \"metodo\": \"TARJETA\",\n      \"monto\": \"50.00\",\n      \"referencia\": \"AUT-001\"\n    }\n  ]\n}"
+            }
+          }
+        },
+        {
+          "name": "Devolver con saldo a favor",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Devolución registrada', () => pm.response.to.have.status(201));",
+                  "const d = pm.response.json().data;",
+                  "pm.test('No sale efectivo', () => pm.expect(d.reembolso).to.equal('0.00'));",
+                  "pm.test('Saldo de una pieza', () => pm.expect(d.saldoFavor.monto).to.equal('25.00'));",
+                  "pm.collectionVariables.set('saldoFavorId', d.saldoFavor.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base}}/devoluciones",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"folio\": {{folioCambio}},\n  \"motivo\": \"Lo cambia por otro\",\n  \"renglones\": [{ \"renglon\": 1, \"cantidad\": \"1\", \"destino\": \"INVENTARIO\" }],\n  \"reembolso\": \"SALDO_FAVOR\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Venta nueva pagada con el saldo",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": ["pm.collectionVariables.set('claveVenta', pm.variables.replaceIn('{{$guid}}'));"]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Venta cobrada', () => pm.response.to.have.status(201));",
+                  "const v = pm.response.json().data;",
+                  "pm.test('El saldo es el primer pago', () => pm.expect(v.pagos[0]).to.include({ metodo: 'SALDO_FAVOR', monto: '25.00' }));",
+                  "pm.test('Sin cambio', () => pm.expect(v.cambio).to.equal('0.00'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base}}/ventas",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{claveVenta}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"iniciadaPor\": \"{{usuarioId}}\",\n  \"renglones\": [{ \"productoId\": \"{{ventaProductoId}}\", \"cantidad\": \"1\" }],\n  \"pagos\": [],\n  \"saldoFavorId\": \"{{saldoFavorId}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Usar el mismo saldo otra vez (409)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": ["pm.collectionVariables.set('claveVenta', pm.variables.replaceIn('{{$guid}}'));"]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('El saldo se usa una vez', () => pm.response.to.have.status(409));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base}}/ventas",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{claveVenta}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"iniciadaPor\": \"{{usuarioId}}\",\n  \"renglones\": [{ \"productoId\": \"{{ventaProductoId}}\", \"cantidad\": \"1\" }],\n  \"pagos\": [],\n  \"saldoFavorId\": \"{{saldoFavorId}}\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Promociones",
+      "item": [
+        {
+          "name": "Registrar promoción 3x2",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "const dia = (n) => { const d = new Date(Date.now() + n * 86400000); return d.toISOString().slice(0, 10); };",
+                  "pm.collectionVariables.set('promoInicio', dia(30));",
+                  "pm.collectionVariables.set('promoFin', dia(36));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Promoción registrada', () => pm.response.to.have.status(201));",
+                  "const d = pm.response.json().data;",
+                  "pm.test('Empieza después: programada', () => pm.expect(d.estado).to.equal('PROGRAMADA'));",
+                  "pm.test('Lleva 3 y paga 2', () => pm.expect([d.lleva, d.paga]).to.deep.equal([3, 2]));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base}}/promociones",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"productoId\": \"{{entradaProductoId}}\",\n  \"inicio\": \"{{promoInicio}}\",\n  \"fin\": \"{{promoFin}}\",\n  \"tipo\": \"NXM\",\n  \"lleva\": 3,\n  \"paga\": 2\n}"
+            }
+          }
+        },
+        {
+          "name": "Promoción que se cruza con otra (409)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('No se traslapa', () => pm.response.to.have.status(409));",
+                  "pm.test('Dice cuál', () => pm.expect(pm.response.json().detail).to.include('ya tiene una promoción'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base}}/promociones",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"productoId\": \"{{entradaProductoId}}\",\n  \"inicio\": \"{{promoInicio}}\",\n  \"fin\": \"{{promoFin}}\",\n  \"tipo\": \"PRECIO_ESPECIAL\",\n  \"precio\": \"1.00\"\n}"
+            }
+          }
+        },
+        {
+          "name": "NxM que no regala nada (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Se paga menos de lo que se lleva', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base}}/promociones",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"productoId\": \"{{entradaProductoId}}\",\n  \"inicio\": \"{{promoInicio}}\",\n  \"fin\": \"{{promoFin}}\",\n  \"tipo\": \"NXM\",\n  \"lleva\": 2,\n  \"paga\": 2\n}"
+            }
+          }
+        },
+        {
+          "name": "Consultar promociones programadas",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Lista', () => pm.response.to.have.status(200));",
+                  "pm.test('Aparece la 3x2', () => pm.expect(pm.response.json().data.some((p) => p.tipo === 'NXM')).to.equal(true));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base}}/promociones?estado=PROGRAMADA"
+          }
+        },
+        {
+          "name": "Promoción que empieza hoy",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "const hoy = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Mazatlan' });",
+                  "pm.collectionVariables.set('promoHoy', hoy);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Promoción registrada', () => pm.response.to.have.status(201));",
+                  "pm.test('Ya está activa', () => pm.expect(pm.response.json().data.estado).to.equal('ACTIVA'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base}}/promociones",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"productoId\": \"{{ventaProductoId}}\",\n  \"tipo\": \"PRECIO_ESPECIAL\",\n  \"precio\": \"20.00\",\n  \"inicio\": \"{{promoHoy}}\",\n  \"fin\": \"{{promoHoy}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Venta con la promoción aplicada sola",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": ["pm.collectionVariables.set('claveVenta', pm.variables.replaceIn('{{$guid}}'));"]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Venta cobrada', () => pm.response.to.have.status(201));",
+                  "const v = pm.response.json().data;",
+                  "pm.test('Cobra el precio especial', () => pm.expect(v.total).to.equal('20.00'));",
+                  "pm.test('Muestra el ahorro', () => pm.expect(v.ahorroPromociones).to.equal('5.00'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base}}/ventas",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{claveVenta}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"iniciadaPor\": \"{{usuarioId}}\",\n  \"renglones\": [\n    {\n      \"productoId\": \"{{ventaProductoId}}\",\n      \"cantidad\": \"1\"\n    }\n  ],\n  \"pagos\": [\n    {\n      \"metodo\": \"TARJETA\",\n      \"monto\": \"20.00\",\n      \"referencia\": \"AUT-002\"\n    }\n  ]\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Clientes",
+      "item": [
+        {
+          "name": "Sin aceptar el aviso no se guarda (422)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.collectionVariables.set('clienteCorreo', 'cliente' + Date.now() + '@correo.mx');",
+                  "pm.collectionVariables.set('clienteTelefono', String(Date.now()).slice(-10));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('No se registra', () => pm.response.to.have.status(422));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base}}/clientes",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"correo\": \"{{clienteCorreo}}\",\n  \"telefono\": \"{{clienteTelefono}}\",\n  \"aceptaAviso\": false\n}"
+            }
+          }
+        },
+        {
+          "name": "Registrar cliente",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Cliente registrado', () => pm.response.to.have.status(201));",
+                  "const d = pm.response.json().data;",
+                  "pm.test('Queda suscrito', () => pm.expect(d.suscrito).to.equal(true));",
+                  "pm.collectionVariables.set('clienteId', d.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base}}/clientes",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"correo\": \"{{clienteCorreo}}\",\n  \"telefono\": \"{{clienteTelefono}}\",\n  \"aceptaAviso\": true\n}"
+            }
+          }
+        },
+        {
+          "name": "Registrar otra vez: ya está suscrito",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('No se duplica', () => pm.response.to.have.status(200));",
+                  "pm.test('Lo indica', () => pm.expect(pm.response.json().message).to.equal('El cliente ya está suscrito'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base}}/clientes",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"correo\": \"{{clienteCorreo}}\",\n  \"telefono\": \"{{clienteTelefono}}\",\n  \"aceptaAviso\": true\n}"
+            }
+          }
+        },
+        {
+          "name": "Buscar por teléfono",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Encontrado', () => pm.response.to.have.status(200));",
+                  "pm.test('Es el mismo', () => pm.expect(pm.response.json().data.id).to.equal(pm.collectionVariables.get('clienteId')));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base}}/clientes?contacto={{clienteTelefono}}"
+          }
+        },
+        {
+          "name": "Dar de baja",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Baja registrada', () => pm.response.to.have.status(200));",
+                  "pm.test('Ya no está suscrito', () => pm.expect(pm.response.json().data.suscrito).to.equal(false));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base}}/clientes/{{clienteId}}/baja"
+          }
+        },
+        {
+          "name": "Dar de baja otra vez (409)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('Ya estaba de baja', () => pm.response.to.have.status(409));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base}}/clientes/{{clienteId}}/baja"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Caja: arqueo y cierre",
+      "item": [
+        {
+          "name": "Arqueo con faltante: recontar",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Conteo registrado', () => pm.response.to.have.status(201));",
+                  "pm.test('Pide recontar', () => pm.expect(pm.response.json().data.resultado).to.equal('RECONTAR'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base}}/caja/arqueo",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"conteo\": {\n    \"B100\": 2\n  }\n}"
+            }
+          }
+        },
+        {
+          "name": "Cerrar sin recontar (422)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('Primero se recuenta', () => pm.response.to.have.status(422));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base}}/caja/cierre",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          }
+        },
+        {
+          "name": "Reconteo con diferencia: justificar",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Reconteo registrado', () => pm.response.to.have.status(201));",
+                  "const d = pm.response.json().data;",
+                  "pm.test('Exige justificación', () => pm.expect(d.resultado).to.equal('JUSTIFICAR'));",
+                  "pm.test('Diferencia de -25.00', () => pm.expect(d.diferencia).to.equal('-25.00'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base}}/caja/arqueo",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"conteo\": {\n    \"B100\": 2,\n    \"B50\": 1\n  }\n}"
+            }
+          }
+        },
+        {
+          "name": "Cerrar sin justificación (422)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('Falta la justificación', () => pm.response.to.have.status(422));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base}}/caja/cierre",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          }
+        },
+        {
+          "name": "Cerrar con justificación",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Caja cerrada', () => pm.response.to.have.status(200));",
+                  "pm.test('Efectivo final 250.00', () => pm.expect(pm.response.json().data.efectivoFinal).to.equal('250.00'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base}}/caja/cierre",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"justificacion\": \"Se pagó al repartidor del pan sin registrar el retiro\"\n}"
+            }
+          }
+        },
+        {
+          "name": "El resumen del día queda en los envíos",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Lista de envíos', () => pm.response.to.have.status(200));",
+                  "const resumen = pm.response.json().data.filter((e) => e.tipo === 'RESUMEN_DIA');",
+                  "pm.test('Por correo; por Telegram solo si el Dueño vinculó su chat', () => pm.expect(resumen.map((e) => e.canal)).to.deep.equal(['CORREO']));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base}}/envios?limit=100"
+          }
+        },
+        {
+          "name": "Se pidió el respaldo al cerrar",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Lista de respaldos', () => pm.response.to.have.status(200));",
+                  "const [ultimo] = pm.response.json().data;",
+                  "pm.test('El más reciente es el del cierre', () => pm.expect(ultimo.estado).to.be.oneOf(['PENDIENTE', 'CORRECTO']));",
+                  "pm.test('Con nombre de archivo .dump', () => pm.expect(ultimo.archivo).to.match(/\\.dump$/));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base}}/respaldos?limit=5"
+          }
+        },
+        {
+          "name": "Abrir de nuevo el mismo día (409)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('Una caja por día', () => pm.response.to.have.status(409));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base}}/caja/apertura",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Reportes y exportación (incremento 4)",
+      "description": "Los 8 reportes del Dueño con la jornada de arriba y su exportación a PDF y Excel. La exportación la hace el worker: debe estar encendido.",
+      "item": [
+        {
+          "name": "Ventas del día",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Reporte de ventas', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json().data;",
+                  "pm.test('Es de hoy', () => { pm.expect(r.tipo).to.eql('ventas'); pm.expect(r.desde).to.eql(r.hasta); });",
+                  "pm.test('Cuenta las ventas cobradas y lo devuelto', () => { pm.expect(r.totales.ventas).to.be.at.least(3); pm.expect(Number(r.totales.devuelto)).to.be.above(0); });",
+                  "pm.test('Neto = total - devuelto', () => pm.expect(Number(r.totales.neto)).to.be.closeTo(Number(r.totales.total) - Number(r.totales.devuelto), 0.001));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base}}/reportes/ventas"
+          }
+        },
+        {
+          "name": "Ganancia por producto",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Reporte de ganancia', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json().data;",
+                  "pm.test('Es de hoy', () => { pm.expect(r.tipo).to.eql('ganancia'); pm.expect(r.desde).to.eql(r.hasta); });",
+                  "pm.test('Trae productos y totales', () => { pm.expect(r.productos.length).to.be.above(0); pm.expect(r.totales).to.have.keys('venta', 'costo', 'ganancia', 'margen'); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base}}/reportes/ganancia"
+          }
+        },
+        {
+          "name": "Más y menos vendidos",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Reporte de mas-vendidos', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json().data;",
+                  "pm.test('Es de hoy', () => { pm.expect(r.tipo).to.eql('mas-vendidos'); pm.expect(r.desde).to.eql(r.hasta); });",
+                  "pm.test('Dos listas', () => { pm.expect(r.masVendidos.length).to.be.above(0); pm.expect(r.menosVendidos).to.be.an('array'); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base}}/reportes/mas-vendidos"
+          }
+        },
+        {
+          "name": "Corte de caja",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Reporte de cortes', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json().data;",
+                  "pm.test('Es de hoy', () => { pm.expect(r.tipo).to.eql('cortes'); pm.expect(r.desde).to.eql(r.hasta); });",
+                  "pm.test('La caja de hoy cerrada con su diferencia', () => { pm.expect(r.cajas[0].estado).to.eql('CERRADA'); pm.expect(r.cajas[0].diferencia).to.be.a('string'); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base}}/reportes/cortes"
+          }
+        },
+        {
+          "name": "Inventario valorizado",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Reporte de inventario', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json().data;",
+                  "pm.test('Es de hoy', () => { pm.expect(r.tipo).to.eql('inventario'); pm.expect(r.desde).to.eql(r.hasta); });",
+                  "pm.test('Con valor total', () => pm.expect(Number(r.totales.valor)).to.be.above(0));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base}}/reportes/inventario"
+          }
+        },
+        {
+          "name": "Mermas y consumo",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Reporte de mermas', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json().data;",
+                  "pm.test('Es de hoy', () => { pm.expect(r.tipo).to.eql('mermas'); pm.expect(r.desde).to.eql(r.hasta); });",
+                  "pm.test('Aparece la merma de la jornada', () => pm.expect(r.totales.merma.registros).to.be.at.least(1));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base}}/reportes/mermas"
+          }
+        },
+        {
+          "name": "Cancelaciones y devoluciones",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Reporte de cancelaciones', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json().data;",
+                  "pm.test('Es de hoy', () => { pm.expect(r.tipo).to.eql('cancelaciones'); pm.expect(r.desde).to.eql(r.hasta); });",
+                  "pm.test('La venta cancelada y las devoluciones', () => { pm.expect(r.totales.canceladas).to.be.at.least(1); pm.expect(r.totales.devoluciones).to.be.at.least(2); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base}}/reportes/cancelaciones"
+          }
+        },
+        {
+          "name": "Ventas por empleado",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Reporte de empleados', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json().data;",
+                  "pm.test('Es de hoy', () => { pm.expect(r.tipo).to.eql('empleados'); pm.expect(r.desde).to.eql(r.hasta); });",
+                  "pm.test('El Dueño con sus ventas', () => pm.expect(r.empleados.some((e) => e.ventas > 0)).to.be.true);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base}}/reportes/empleados"
+          }
+        },
+        {
+          "name": "Reporte que no existe (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('No existe', () => pm.response.to.have.status(400));",
+                  "pm.test('Dice cuáles hay', () => pm.expect(pm.response.json().errores[0].mensaje).to.include('ventas, ganancia'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base}}/reportes/pastel"
+          }
+        },
+        {
+          "name": "Fechas al revés (422)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('Periodo inválido', () => pm.response.to.have.status(422));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base}}/reportes/ventas?desde={{promoFin}}&hasta={{promoInicio}}"
+          }
+        },
+        {
+          "name": "Exportar ventas a PDF",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Recibido; lo genera el worker', () => pm.response.to.have.status(202));",
+                  "const e = pm.response.json().data;",
+                  "pm.test('Pendiente', () => pm.expect(e.estado).to.eql('PENDIENTE'));",
+                  "pm.collectionVariables.set('exportacionPdf', e.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base}}/reportes/ventas/exportaciones",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"formato\": \"PDF\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Exportar ganancia a Excel",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Recibido', () => pm.response.to.have.status(202));",
+                  "pm.collectionVariables.set('exportacionExcel', pm.response.json().data.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base}}/reportes/ganancia/exportaciones",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"formato\": \"EXCEL\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Las exportaciones quedan listas",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": ["// Se le dan 3 segundos al worker.", "setTimeout(() => {}, 3000);"]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Lista de exportaciones', () => pm.response.to.have.status(200));",
+                  "const ids = [pm.collectionVariables.get('exportacionPdf'), pm.collectionVariables.get('exportacionExcel')];",
+                  "const mias = pm.response.json().data.filter((e) => ids.includes(e.id));",
+                  "pm.test('Las dos LISTO y disponibles', () => { pm.expect(mias.map((e) => e.estado)).to.deep.equal(['LISTO', 'LISTO']); pm.expect(mias.every((e) => e.disponible)).to.be.true; });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base}}/reportes/exportaciones"
+          }
+        },
+        {
+          "name": "Descargar el PDF",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Archivo PDF', () => { pm.response.to.have.status(200); pm.expect(pm.response.headers.get('Content-Type')).to.include('application/pdf'); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base}}/reportes/archivos/{{exportacionPdf}}"
+          }
+        },
+        {
+          "name": "Descargar el Excel",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Archivo de Excel', () => { pm.response.to.have.status(200); pm.expect(pm.response.headers.get('Content-Type')).to.include('spreadsheetml'); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base}}/reportes/archivos/{{exportacionExcel}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Consultar bitácora",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{base}}/bitacora?limit=50",
+          "host": ["{{base}}"],
+          "path": ["bitacora"],
+          "query": [
+            {
+              "key": "limit",
+              "value": "50"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "const acciones = pm.response.json().data.map(r => r.accion);",
+              "pm.test('Registra accesos, catálogo, configuración y caja', () => pm.expect(acciones).to.include.members(['ACCESO', 'ACCESO_FALLIDO', 'PRODUCTO_PRECIO', 'CONFIGURACION_MODIFICADA', 'CAJA_ABIERTA', 'CAJA_RETIRO', 'CAJA_ARQUEO', 'CAJA_CERRADA', 'VENTA_COBRADA', 'TICKET_REIMPRESO', 'VENTA_CANCELADA']));"
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  }
+}

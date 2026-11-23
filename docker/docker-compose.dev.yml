@@ -1,0 +1,49 @@
+# Lo que hace falta para desarrollar y correr las pruebas en la PC: PostgreSQL y Redis.
+# La API y el worker se corren aparte con npm; el POS completo está en docker-compose.yml.
+name: pos-desarrollo
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${DB_USUARIO:-pos}
+      POSTGRES_PASSWORD: ${DB_CLAVE:-pos_local}
+      POSTGRES_DB: ${DB_NOMBRE:-pos}
+      TZ: America/Mazatlan
+      PGTZ: America/Mazatlan
+    # Solo la propia PC se puede conectar.
+    ports:
+      - '127.0.0.1:${DB_PUERTO:-5432}:5432'
+    volumes:
+      - pos_pgdata_dev:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    mem_limit: 512m
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    # noeviction: Redis no borra datos por falta de memoria (BullMQ lo necesita); la caché lleva TTL.
+    command:
+      ['redis-server', '--appendonly', 'yes', '--maxmemory', '200mb', '--maxmemory-policy', 'noeviction']
+    environment:
+      TZ: America/Mazatlan
+    ports:
+      - '127.0.0.1:${REDIS_PUERTO:-6379}:6379'
+    volumes:
+      - pos_redisdata_dev:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    mem_limit: 256m
+    restart: unless-stopped
+
+volumes:
+  pos_pgdata_dev:
+  pos_redisdata_dev:

@@ -1,0 +1,12 @@
+# Lo que no entra a la imagen del servidor (docker/Dockerfile).
+**/node_modules
+**/dist
+**/coverage
+**/.nyc_output
+**/.env
+**/*.log
+.git
+postman
+docker
+apps/servidor/tests
+paquetes/compartido/tests

@@ -1,0 +1,101 @@
+# El POS completo en la PC de la tienda, con un solo comando:
+#   docker compose -f docker/docker-compose.yml up -d --build
+# La configuración (contraseñas, JWT_SECRETO, correo, Telegram) se lee de C:\POS\pos.env; la
+# plantilla es docker/pos.env.example. POS_CARPETA cambia la carpeta (por omisión C:/POS).
+# Solo la API se publica, y solo para la propia PC (127.0.0.1:8080).
+name: pos
+
+x-comun: &comun
+  restart: unless-stopped # arranca solo al encender la PC
+  env_file: ${POS_CARPETA:-C:/POS}/pos.env
+
+services:
+  postgres:
+    <<: *comun
+    image: postgres:16-alpine
+    environment:
+      TZ: America/Mazatlan
+      PGTZ: America/Mazatlan
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    mem_limit: 512m
+
+  redis:
+    <<: *comun
+    image: redis:7-alpine
+    # noeviction: Redis no borra trabajos de BullMQ por falta de memoria; la caché lleva TTL.
+    command:
+      ['redis-server', '--appendonly', 'yes', '--maxmemory', '200mb', '--maxmemory-policy', 'noeviction']
+    environment:
+      TZ: America/Mazatlan
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    mem_limit: 256m
+
+  # API REST y Socket.io. Al arrancar aplica las migraciones pendientes.
+  api:
+    <<: *comun
+    image: pos-servidor
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    environment: &servidor
+      TZ: America/Mazatlan
+      HOST: 0.0.0.0 # dentro del contenedor; hacia afuera solo 127.0.0.1
+      PUERTO: 8080
+      ORIGENES_PERMITIDOS: http://localhost:8080
+      DB_HOST: postgres
+      DB_PUERTO: 5432
+      REDIS_URL: redis://redis:6379
+      RESPALDOS_DIR: /datos/respaldos
+      REPORTES_DIR: /datos/reportes
+      RESPALDO_PG_DUMP: pg_dump
+      RESPALDO_PG_RESTORE: pg_restore
+    ports:
+      - '127.0.0.1:8080:8080'
+    volumes:
+      # Solo lectura: la API revisa si los archivos siguen ahí y entrega las descargas.
+      - ${POS_CARPETA:-C:/POS}/respaldos:/datos/respaldos:ro
+      - ${POS_CARPETA:-C:/POS}/reportes:/datos/reportes:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://127.0.0.1:8080/api/v1/salud > /dev/null || exit 1']
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+    mem_limit: 512m
+
+  # Colas de BullMQ, tareas diarias, bot de Telegram, respaldos y reportes. Espera a que la API
+  # haya aplicado las migraciones.
+  worker:
+    <<: *comun
+    image: pos-servidor
+    command: ['node', 'dist/main-worker.js']
+    environment: *servidor
+    volumes:
+      - ${POS_CARPETA:-C:/POS}/respaldos:/datos/respaldos
+      - ${POS_CARPETA:-C:/POS}/reportes:/datos/reportes
+    depends_on:
+      api:
+        condition: service_healthy
+    mem_limit: 512m
+
+# Docker les antepone el nombre del proyecto: quedan como pos_pgdata y pos_redisdata.
+volumes:
+  pgdata:
+  redisdata:

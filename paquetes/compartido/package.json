@@ -1,0 +1,18 @@
+{
+  "name": "@pos/compartido",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Esquemas, reglas de dominio y permisos que comparten el servidor y la PWA",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "tipos": "tsc --noEmit",
+    "test": "mocha",
+    "cobertura": "nyc mocha"
+  },
+  "dependencies": {
+    "decimal.js": "^10.6.0",
+    "zod": "^4.6.7"
+  }
+}
